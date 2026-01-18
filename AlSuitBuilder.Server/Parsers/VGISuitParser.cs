@@ -8,8 +8,12 @@ namespace AlSuitBuilder.Server.Parsers
 {
     internal class VGISuitParser : RegexParser
     {
+        // Character names can contain: letters, numbers, hyphens, apostrophes, underscores, spaces
+        // Item names can contain: letters, numbers, apostrophes, spaces
+        // Set names can contain: letters, numbers, apostrophes, spaces
+        // Cantrips can contain: letters, spaces, commas
         public VGISuitParser() : base(new List<Regex>() {
-            new Regex(@"(?<character>[A-Za-z\-' ]+), (?<item>[A-Za-z ']*), (?<set>[A-Za-z']* Set){0,1}, AL (?<armorlevel>[0-9]*), (?<cantrips>[A-Za-z ,]*), Wield Lvl (?<wieldreq>[0-9]*), Diff [0-9]+, BU [0-9]+", RegexOptions.Compiled)
+            new Regex(@"(?<character>[A-Za-z0-9\-'_ ]+), (?<item>[A-Za-z0-9 ']+), (?<set>[A-Za-z0-9' ]* Set){0,1},? ?AL (?<armorlevel>[0-9]*), (?<cantrips>[A-Za-z0-9 ,]+), Wield Lvl (?<wieldreq>[0-9]*), Diff [0-9]+, BU [0-9]+", RegexOptions.Compiled)
         })
         {
         }

@@ -23,7 +23,7 @@ namespace AlSuitBuilder.Server
 
         public static UBServer IntegratedServer { get; private set; }
         private static ConcurrentQueue<IServerAction> _actionQueue = new ConcurrentQueue<IServerAction>();
-        private static Dictionary<int, ClientInfo> _clientSubs = new Dictionary<int, ClientInfo>();
+        private static ConcurrentDictionary<int, ClientInfo> _clientSubs = new ConcurrentDictionary<int, ClientInfo>();
 
         public static BuildInfo BuildInfo = null;
 
@@ -33,19 +33,18 @@ namespace AlSuitBuilder.Server
 
         internal static ServerClient GetClient(int clientId)
         {
-            var client = _clientSubs.FirstOrDefault(o => o.Key == clientId);
-            if (client.Key == 0)
-                throw new Exception("Attempt to get client for invalid clientid");
+            if (!_clientSubs.TryGetValue(clientId, out var clientInfo))
+                throw new Exception($"Attempt to get client for invalid clientId: {clientId}");
 
-            return client.Value.ServerClient;
+            return clientInfo.ServerClient;
         }
+
         internal static ClientInfo GetClientInfo(int clientId)
         {
-            var client = _clientSubs.FirstOrDefault(o => o.Key == clientId);
-            if (client.Key == 0)
-                throw new Exception("Attempt to get client for invalid clientid");
+            if (!_clientSubs.TryGetValue(clientId, out var clientInfo))
+                throw new Exception($"Attempt to get client info for invalid clientId: {clientId}");
 
-            return client.Value;
+            return clientInfo;
         }
 
         internal static List<int> GetClientIds()
@@ -123,8 +122,7 @@ namespace AlSuitBuilder.Server
             foreach (var cs in existing)
             {
                 Console.WriteLine("Disconnecting a stale character");
-                _clientSubs.Remove(cs.Key);
-                
+                _clientSubs.TryRemove(cs.Key, out _);
             }
 
             _clientSubs[header.SendingClientId] = new ClientInfo()
@@ -165,7 +163,7 @@ namespace AlSuitBuilder.Server
                 nc.AddMessageHandler<WorkResultMessage>(WorkResultMessageHandler);
                 nc.AddMessageHandler<InitiateBuildMessage>(InitiateBuildMessageHandler);
                 nc.AddMessageHandler<TerminateBuildMessage>(TerminateBuildMessageHandler);
-                _clientSubs.Add(c, new ClientInfo() { ServerClient = nc });
+                _clientSubs.TryAdd(c, new ClientInfo() { ServerClient = nc });
                 _actionQueue.Enqueue(new WelcomeClientAction(c));
             });
 
@@ -208,18 +206,11 @@ namespace AlSuitBuilder.Server
         private static void IntegratedServer_OnClientDisconnected(object sender, EventArgs e)
         {
             var orphans = _clientSubs.Where(o => !IntegratedServer.Clients.Any(c => c.Key == o.Key)).ToList();
-            orphans.ForEach(c =>
+            foreach (var orphan in orphans)
             {
-                if (IntegratedServer.Clients.ContainsKey(c.Key))
-                {
-                    var nc = IntegratedServer.Clients[c.Key];
-                    nc.RemoveMessageHandler<ReadyForWorkMessage>(ReadyForWorkMessageHandler);
-                    nc.RemoveMessageHandler<WorkResultMessage>(WorkResultMessageHandler);
-                    nc.RemoveMessageHandler<InitiateBuildMessage>(InitiateBuildMessageHandler);
-                    nc.RemoveMessageHandler<TerminateBuildMessage>(TerminateBuildMessageHandler);
-                    _clientSubs.Remove(c.Key);
-                }
-            });
+                Console.WriteLine($"Removing disconnected client {orphan.Key} ({orphan.Value.CharacterName ?? "unknown"})");
+                _clientSubs.TryRemove(orphan.Key, out _);
+            }
         }
 
         private static void WorkResultMessageHandler(MessageHeader header, WorkResultMessage message)
@@ -231,18 +222,24 @@ namespace AlSuitBuilder.Server
             if (message.WorkId <= 0)
                 return;
 
-            // if (message.Success)
-            
-            var work = BuildInfo.WorkItems.FirstOrDefault(o=>o.Id == message.WorkId);
+            var work = BuildInfo.WorkItems.FirstOrDefault(o => o.Id == message.WorkId);
             if (work == null) return;
 
-            Console.WriteLine("Removing " + work.Id);
-            BuildInfo.WorkItems.RemoveAll(o => o.Id == work.Id);
-            BuildInfo.WorkItems.Where(o => o.Character == work.Character).ToList().ForEach(o => o.LastAttempt = DateTime.MinValue);
-
-
-
-
+            if (message.Success)
+            {
+                Console.WriteLine("Removing completed work item " + work.Id);
+                BuildInfo.RecordSuccess(message.WorkId);
+                BuildInfo.WorkItems.RemoveAll(o => o.Id == work.Id);
+                // Reset retry delay for remaining items on this character
+                BuildInfo.WorkItems.Where(o => o.Character == work.Character).ToList().ForEach(o => o.LastAttempt = DateTime.MinValue);
+            }
+            else
+            {
+                Console.WriteLine($"Work item {work.Id} failed, will retry after delay");
+                BuildInfo.RecordError(message.WorkId, $"Work item '{work.ItemName}' delivery failed");
+                // Reset LastAttempt to allow retry after the standard 30-second delay
+                work.LastAttempt = DateTime.Now;
+            }
         }
 
         public static void SendMessageToClient(int clientId, INetworkMessage message)

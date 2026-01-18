@@ -21,6 +21,12 @@ namespace AlSuitBuilder.Plugin.Integrations
         public delegate void DOnGiveItemMessage(GiveItemMessage giveItemMessage);
         public event DOnGiveItemMessage OnGiveItemMessage;
 
+        public delegate void DOnInitiateBuildResponseMessage(InitiateBuildResponseMessage message);
+        public event DOnInitiateBuildResponseMessage OnInitiateBuildResponseMessage;
+
+        public delegate void DOnSwitchCharacterMessage(SwitchCharacterMessage message);
+        public event DOnSwitchCharacterMessage OnSwitchCharacterMessage;
+
 
         public void Startup()
         {
@@ -52,12 +58,14 @@ namespace AlSuitBuilder.Plugin.Integrations
             SuitBuilderPlugin.Current.SwapCharacter = message.Character;
 
             Utils.WriteToChat("Told to switch characters to " + message.Character);
-            CoreManager.Current.Actions.Logout();            
+            OnSwitchCharacterMessage?.Invoke(message);
+            CoreManager.Current.Actions.Logout();
         }
 
         private void InitiateBuildResponseMessageHandler(MessageHeader header, InitiateBuildResponseMessage message)
         {
             Utils.WriteToChat($"Response: Accepted = {message.Accepted}, Message = {message.Message}");
+            OnInitiateBuildResponseMessage?.Invoke(message);
         }
 
         private void GiveItemMessageHandler(MessageHeader header, GiveItemMessage message)

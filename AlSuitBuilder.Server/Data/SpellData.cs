@@ -45,11 +45,13 @@ namespace AlSuitBuilder.Server.Data
 
         public int SpellIdByName(string name)
         {
-            var spell = Spells.FirstOrDefault(o => o.Name == name);
-            var resultId =   spell != null ? spell.Id : -1;
-            Console.WriteLine("SpellbyId:" + name + " result: " + resultId);
-            return resultId;
+            if (string.IsNullOrWhiteSpace(name))
+                return -1;
 
+            var spell = Spells.FirstOrDefault(o => string.Equals(o.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
+            var resultId = spell != null ? spell.Id : -1;
+            Console.WriteLine("SpellByName:" + name + " result: " + resultId);
+            return resultId;
         }
 
     }

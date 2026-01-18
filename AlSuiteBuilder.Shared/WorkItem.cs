@@ -13,7 +13,7 @@ namespace AlSuitBuilder.Shared
         public int Burden;
         public DateTime LastAttempt = DateTime.MinValue;
         public int Value;
-
+        public int ConsecutiveErrors = 0;
     }
 
    

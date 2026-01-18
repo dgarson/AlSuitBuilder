@@ -10,9 +10,10 @@ namespace AlSuitBuilder.Server.Parsers
 {
     internal class VGIGameParser : RegexParser
     {
+        // Extended character classes to support numbers, underscores, and special characters in names
         public VGIGameParser() : base(new List<Regex>() {
-            new Regex(@"(\[VGI\] )?(?<item>[A-Za-z ]+ )(w(?<work>[\d]+)) (?<crap>[A-Za-z \+0-9%]+)?(\[\D+ ?\D+? ?(?<wield>[0-9]+) to \w+\] ?)+(\[(?<cantrips>[A-Za-z, ']*)\] )?(\[(?<set>[A-Za-z0-9']+) set\] ?)?(Value (?<value>\d+)p ?)?\(Last on (?<character>[A-Za-z\d\-' ]*)\)", RegexOptions.Compiled),
-            new Regex(@"(?<item>[A-Za-z ']*), (?<set>[A-Za-z']* Set){0,1}, AL (?<armorlevel>[0-9]*), (?<cantrips>[A-Za-z ,]*), Wield (.*), Diff ([0-9]+), (.*) \(Last on (?<character>[A-Za-z0-9 \-']*)\)", RegexOptions.Compiled)
+            new Regex(@"(\[VGI\] )?(?<item>[A-Za-z0-9 ]+ )(w(?<work>[\d]+)) (?<crap>[A-Za-z \+0-9%]+)?(\[\D+ ?\D+? ?(?<wield>[0-9]+) to \w+\] ?)+(\[(?<cantrips>[A-Za-z0-9, ']+)\] )?(\[(?<set>[A-Za-z0-9' ]+) set\] ?)?(Value (?<value>\d+)p ?)?\(Last on (?<character>[A-Za-z0-9\-'_ ]+)\)", RegexOptions.Compiled),
+            new Regex(@"(?<item>[A-Za-z0-9 ']+), (?<set>[A-Za-z0-9' ]* Set){0,1},? ?AL (?<armorlevel>[0-9]*), (?<cantrips>[A-Za-z0-9 ,]+), Wield (.*), Diff ([0-9]+), (.*) \(Last on (?<character>[A-Za-z0-9\-'_ ]+)\)", RegexOptions.Compiled)
         })
         {
         }

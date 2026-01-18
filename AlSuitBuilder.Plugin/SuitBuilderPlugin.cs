@@ -89,6 +89,7 @@ namespace AlSuitBuilder.Plugin
 
                 _net.OnWelcomeMessage += Net_OnWelcomeMessage;
                 _net.OnGiveItemMessage += Net_OnGiveItemMessage;
+                _net.OnInitiateBuildResponseMessage += Net_OnInitiateBuildResponseMessage;
 
                 _net.Startup();
             }
@@ -424,13 +425,35 @@ namespace AlSuitBuilder.Plugin
         {
             Utils.WriteToChat("Welcome received.");
 
-            var state = SuitBuilderState.Idle;
-
             // send a request for action
-            state = SuitBuilderState.Waiting;
+            SetState(SuitBuilderState.Waiting);
             AddAction(new GenericWorkAction(() => SendReadyForWork()));
+            // After sending ReadyForWork, transition to Idle
+            AddAction(new GenericWorkAction(() => SetState(SuitBuilderState.Idle)));
+        }
 
-            SetState(state);
+        /// <summary>
+        /// Handles the server's response to a build initiation request.
+        /// </summary>
+        private void Net_OnInitiateBuildResponseMessage(InitiateBuildResponseMessage message)
+        {
+            if (message.Accepted)
+            {
+                // Build was accepted - if message indicates completion, go to Idle; otherwise Building
+                if (message.Message.Contains("completed"))
+                {
+                    SetState(SuitBuilderState.Idle);
+                }
+                else
+                {
+                    SetState(SuitBuilderState.Building);
+                }
+            }
+            else
+            {
+                // Build was rejected or failed
+                SetState(SuitBuilderState.Idle);
+            }
         }
 
         public void AddAction(QueuedAction action)
@@ -538,9 +561,9 @@ namespace AlSuitBuilder.Plugin
             _net = new NetworkProxy();
             _net.OnWelcomeMessage += Net_OnWelcomeMessage;
             _net.OnGiveItemMessage += Net_OnGiveItemMessage;
+            _net.OnInitiateBuildResponseMessage += Net_OnInitiateBuildResponseMessage;
 
             _net.Startup();
-
         }
 
         private void CharacterFilter_Logoff(object sender, LogoffEventArgs e)
@@ -618,7 +641,6 @@ namespace AlSuitBuilder.Plugin
 
         public void Shutdown()
         {
-
             _net?.Shutdown();
 
             _core.CharacterFilter.LoginComplete -= CharacterFilter_LoginComplete;
@@ -626,27 +648,36 @@ namespace AlSuitBuilder.Plugin
 
             _net.OnWelcomeMessage -= Net_OnWelcomeMessage;
             _net.OnGiveItemMessage -= Net_OnGiveItemMessage;
+            _net.OnInitiateBuildResponseMessage -= Net_OnInitiateBuildResponseMessage;
             _core.CommandLineText -= _core_CommandLineText;
             _core.ChatBoxMessage -= _core_ChatBoxMessage;
-
-
         }
 
         private void SetState(SuitBuilderState state)
         {
-
-            switch (state)
-            {
-                case SuitBuilderState.Unknown:
-                case SuitBuilderState.Idle:
-                    break;
-                case SuitBuilderState.Building:
-                    break;
-                default:
-                    break;
-            }
-
+            var previousState = PluginState;
             PluginState = state;
+
+            if (previousState != state)
+            {
+                Utils.WriteLog($"State transition: {previousState} -> {state}");
+
+                switch (state)
+                {
+                    case SuitBuilderState.Unknown:
+                        Utils.WriteToChat("[AlSuitBuilder] State: Initializing...");
+                        break;
+                    case SuitBuilderState.Idle:
+                        Utils.WriteToChat("[AlSuitBuilder] State: Idle - ready for commands");
+                        break;
+                    case SuitBuilderState.Waiting:
+                        Utils.WriteToChat("[AlSuitBuilder] State: Waiting for server response...");
+                        break;
+                    case SuitBuilderState.Building:
+                        Utils.WriteToChat("[AlSuitBuilder] State: Build in progress");
+                        break;
+                }
+            }
         }
 
         private void SendReadyForWork()

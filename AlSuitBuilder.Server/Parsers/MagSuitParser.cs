@@ -8,9 +8,9 @@ namespace AlSuitBuilder.Server.Parsers
 {
     internal class MagParser : RegexParser
     {
+        // Extended character classes to support numbers, underscores, and special characters in names
         public MagParser() : base(new List<Regex>() {
-           // new Regex(@"(?<character>[A-Za-z\-' ]+), (?<item>[A-Za-z ']*), (?<set>[A-Za-z']* Set){0,1}, AL (?<armorlevel>[0-9]*), (?<cantrips>[A-Za-z ,]*), Wield Lvl (?<wieldreq>[0-9]*), Diff [0-9]+, BU [0-9]+", RegexOptions.Compiled),
-            new Regex(@"(?<character>[A-Za-z\-' ]+), (?<item>[A-Za-z ']*,) ?(?<set>[A-Za-z']* Set, ?)?(AL (?<armorlevel>[0-9]*), ?)?(?<cantrips>[A-Za-z ,]*,) (Wield Lvl (?<wieldreq>[0-9]*),)? ?([A-Za-z0-9 ]+ to Activate, ?)?(Diff (?<diff>[0-9]+), ?)?(Craft (?<craft>[0-9]+), ?)?(Value (?<value>[0-9,]+),)? ?(BU (?<burden>[0-9]+),?)? ?\[?(?<rating>[A-Z0-9]+)?\]?", RegexOptions.Compiled)
+            new Regex(@"(?<character>[A-Za-z0-9\-'_ ]+), (?<item>[A-Za-z0-9 ']+,) ?(?<set>[A-Za-z0-9' ]* Set, ?)?(AL (?<armorlevel>[0-9]*), ?)?(?<cantrips>[A-Za-z0-9 ,]+,) (Wield Lvl (?<wieldreq>[0-9]*),)? ?([A-Za-z0-9 ]+ to Activate, ?)?(Diff (?<diff>[0-9]+), ?)?(Craft (?<craft>[0-9]+), ?)?(Value (?<value>[0-9,]+),)? ?(BU (?<burden>[0-9]+),?)? ?\[?(?<rating>[A-Z0-9]+)?\]?", RegexOptions.Compiled)
         })
         {
         }
