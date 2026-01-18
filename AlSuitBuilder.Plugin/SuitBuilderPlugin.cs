@@ -264,10 +264,34 @@ namespace AlSuitBuilder.Plugin
                 case "cancel":
                     Utils.WriteToChat("Cancelling current job if it exists");
                     AddAction(new GenericWorkAction(() => SendCancelBuild()));
-
+                    break;
+                case "resume":
+                    Utils.WriteToChat("Requesting build resume...");
+                    AddAction(new GenericWorkAction(() => SendResumeBuild()));
+                    break;
+                case "status":
+                    Utils.WriteToChat("Requesting build status...");
+                    AddAction(new GenericWorkAction(() => SendStatusRequest()));
+                    break;
+                case "history":
+                    Utils.WriteToChat("Requesting build history...");
+                    AddAction(new GenericWorkAction(() => SendHistoryRequest()));
+                    break;
+                case "abandon":
+                    Utils.WriteToChat("Requesting to abandon crashed build...");
+                    AddAction(new GenericWorkAction(() => SendAbandonBuild()));
+                    break;
+                case "help":
+                    Utils.WriteToChat("AlSuitBuilder Commands:");
+                    Utils.WriteToChat("  /alb build <suitname> - Start a new build");
+                    Utils.WriteToChat("  /alb cancel - Cancel current build");
+                    Utils.WriteToChat("  /alb resume - Resume a crashed build");
+                    Utils.WriteToChat("  /alb status - Show current build status");
+                    Utils.WriteToChat("  /alb history - Show build history");
+                    Utils.WriteToChat("  /alb abandon - Abandon a crashed build");
                     break;
                 default:
-                    Utils.WriteToChat("Unknown /alb command");
+                    Utils.WriteToChat("Unknown /alb command. Use /alb help for available commands.");
                     break;
             }
         }
@@ -673,8 +697,27 @@ namespace AlSuitBuilder.Plugin
         }
         private void SendCancelBuild()
         {
-
             _net.Send(new TerminateBuildMessage());
+        }
+
+        private void SendResumeBuild()
+        {
+            _net.Send(new ResumeBuildMessage());
+        }
+
+        private void SendStatusRequest()
+        {
+            _net.Send(new BuildStatusRequestMessage());
+        }
+
+        private void SendHistoryRequest()
+        {
+            _net.Send(new BuildHistoryRequestMessage() { MaxEntries = 10 });
+        }
+
+        private void SendAbandonBuild()
+        {
+            _net.Send(new AbandonBuildMessage());
         }
 
         internal List<int> FindItemsByName(string name)

@@ -1,5 +1,6 @@
 ﻿using AlSuitBuilder.Server.Actions;
 using AlSuitBuilder.Server.Data;
+using AlSuitBuilder.Server.Persistence;
 using AlSuitBuilder.Shared;
 using AlSuitBuilder.Shared.Messages;
 using AlSuitBuilder.Shared.Messages.Client;
@@ -28,6 +29,11 @@ namespace AlSuitBuilder.Server
         public static BuildInfo BuildInfo = null;
 
         public static SpellData SpellData;
+
+        /// <summary>
+        /// Manages persistence of build state for crash recovery.
+        /// </summary>
+        public static BuildPersistenceManager PersistenceManager { get; private set; }
 
         public static string BuildDirectory { get; private set; }
 
@@ -64,6 +70,11 @@ namespace AlSuitBuilder.Server
                 Console.WriteLine("Loading Spell data");
                 // load our spell data
                 SpellData = new SpellData();
+
+                // Initialize persistence manager for crash recovery
+                Console.WriteLine("Initializing persistence manager");
+                PersistenceManager = new BuildPersistenceManager(BuildDirectory);
+                CheckForCrashedBuild();
 
                 Action<string> logs = (s) => _actionQueue.Enqueue(LogAction.Create(s));
                 IntegratedServer = new UBNetworking.UBServer("127.0.0.1", 16753, logs, new AlSerializationBinder());
@@ -165,6 +176,10 @@ namespace AlSuitBuilder.Server
                 nc.AddMessageHandler<WorkResultMessage>(WorkResultMessageHandler);
                 nc.AddMessageHandler<InitiateBuildMessage>(InitiateBuildMessageHandler);
                 nc.AddMessageHandler<TerminateBuildMessage>(TerminateBuildMessageHandler);
+                nc.AddMessageHandler<ResumeBuildMessage>(ResumeBuildMessageHandler);
+                nc.AddMessageHandler<BuildStatusRequestMessage>(BuildStatusRequestMessageHandler);
+                nc.AddMessageHandler<BuildHistoryRequestMessage>(BuildHistoryRequestMessageHandler);
+                nc.AddMessageHandler<AbandonBuildMessage>(AbandonBuildMessageHandler);
                 _clientSubs.Add(c, new ClientInfo() { ServerClient = nc });
                 _actionQueue.Enqueue(new WelcomeClientAction(c));
             });
@@ -224,25 +239,21 @@ namespace AlSuitBuilder.Server
 
         private static void WorkResultMessageHandler(MessageHeader header, WorkResultMessage message)
         {
-
             if (BuildInfo == null)
                 return;
 
             if (message.WorkId <= 0)
                 return;
 
-            // if (message.Success)
-            
-            var work = BuildInfo.WorkItems.FirstOrDefault(o=>o.Id == message.WorkId);
+            var work = BuildInfo.WorkItems.FirstOrDefault(o => o.Id == message.WorkId);
             if (work == null) return;
 
             Console.WriteLine("Removing " + work.Id);
             BuildInfo.WorkItems.RemoveAll(o => o.Id == work.Id);
             BuildInfo.WorkItems.Where(o => o.Character == work.Character).ToList().ForEach(o => o.LastAttempt = DateTime.MinValue);
 
-
-
-
+            // Persist state after work item completion
+            _actionQueue.Enqueue(new SaveBuildStateAction(work.Id, message.Success));
         }
 
         public static void SendMessageToClient(int clientId, INetworkMessage message)
@@ -257,5 +268,81 @@ namespace AlSuitBuilder.Server
                 Type = MessageHeaderType.Serialized
             }, message);
         }
+
+        #region Persistence Message Handlers
+
+        private static void ResumeBuildMessageHandler(MessageHeader header, ResumeBuildMessage message)
+        {
+            _actionQueue.Enqueue(new ResumeBuildAction(header.SendingClientId));
+        }
+
+        private static void BuildStatusRequestMessageHandler(MessageHeader header, BuildStatusRequestMessage message)
+        {
+            _actionQueue.Enqueue(new BuildStatusAction(header.SendingClientId));
+        }
+
+        private static void BuildHistoryRequestMessageHandler(MessageHeader header, BuildHistoryRequestMessage message)
+        {
+            _actionQueue.Enqueue(new BuildHistoryAction(header.SendingClientId, message.MaxEntries));
+        }
+
+        private static void AbandonBuildMessageHandler(MessageHeader header, AbandonBuildMessage message)
+        {
+            _actionQueue.Enqueue(new AbandonBuildAction(header.SendingClientId));
+        }
+
+        /// <summary>
+        /// Checks for crashed builds on server startup.
+        /// </summary>
+        private static void CheckForCrashedBuild()
+        {
+            if (PersistenceManager == null || !PersistenceManager.HasActiveState())
+                return;
+
+            try
+            {
+                var state = PersistenceManager.LoadActiveState();
+                if (state == null)
+                    return;
+
+                if (state.Status == BuildStatus.Active)
+                {
+                    // Mark as crashed
+                    state.Status = BuildStatus.Crashed;
+                    PersistenceManager.SaveActiveState(state);
+
+                    var completedCount = state.WorkItems.FindAll(w => w.Status == WorkItemStatus.Completed).Count;
+                    var pendingCount = state.WorkItems.FindAll(w => w.Status != WorkItemStatus.Completed).Count;
+
+                    Console.WriteLine();
+                    Console.WriteLine("========================================");
+                    Console.WriteLine("[RECOVERY] Detected crashed build!");
+                    Console.WriteLine($"  Build: {state.Name}");
+                    Console.WriteLine($"  Progress: {completedCount}/{state.TotalItemCount} items completed");
+                    Console.WriteLine($"  Remaining: {pendingCount} items");
+                    Console.WriteLine();
+                    Console.WriteLine("  Use /alb resume to continue");
+                    Console.WriteLine("  Use /alb abandon to discard");
+                    Console.WriteLine("========================================");
+                    Console.WriteLine();
+                }
+                else if (state.Status == BuildStatus.Crashed)
+                {
+                    // Already marked as crashed from a previous restart
+                    var pendingCount = state.WorkItems.FindAll(w => w.Status != WorkItemStatus.Completed).Count;
+                    Console.WriteLine();
+                    Console.WriteLine($"[RECOVERY] Crashed build '{state.Name}' available ({pendingCount} items remaining)");
+                    Console.WriteLine("  Use /alb resume to continue or /alb abandon to discard");
+                    Console.WriteLine();
+                }
+            }
+            catch (Exception ex)
+            {
+                Utils.LogException(ex);
+                Console.WriteLine("[RECOVERY] Error checking for crashed builds: " + ex.Message);
+            }
+        }
+
+        #endregion
     }
 }

@@ -58,6 +58,7 @@
   <ItemGroup>
     <Reference Include="System" />
     <Reference Include="System.Core" />
+    <Reference Include="System.Runtime.Serialization" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -66,13 +67,26 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Actions\AbandonBuildAction.cs" />
+    <Compile Include="Actions\BuildHistoryAction.cs" />
+    <Compile Include="Actions\BuildStatusAction.cs" />
     <Compile Include="Actions\ProcessWorkResultAction.cs" />
+    <Compile Include="Actions\ResumeBuildAction.cs" />
+    <Compile Include="Actions\SaveBuildStateAction.cs" />
     <Compile Include="Actions\TerminateSuitAction.cs" />
     <Compile Include="Actions\InitiateSuitAction.cs" />
     <Compile Include="Actions\IServerAction.cs" />
     <Compile Include="Actions\LogAction.cs" />
     <Compile Include="Actions\UnclearableAction.cs" />
     <Compile Include="Actions\WelcomeClientAction.cs" />
+    <Compile Include="Persistence\BuildEventLog.cs" />
+    <Compile Include="Persistence\BuildEventType.cs" />
+    <Compile Include="Persistence\BuildHistoryEntry.cs" />
+    <Compile Include="Persistence\BuildPersistenceManager.cs" />
+    <Compile Include="Persistence\BuildStatus.cs" />
+    <Compile Include="Persistence\PersistentBuildState.cs" />
+    <Compile Include="Persistence\PersistentWorkItem.cs" />
+    <Compile Include="Persistence\WorkItemStatus.cs" />
     <Compile Include="BuildInfo.cs" />
     <Compile Include="ClientInfo.cs" />
     <Compile Include="Data\SpellData.cs" />
