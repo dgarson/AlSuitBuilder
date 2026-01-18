@@ -1,4 +1,5 @@
 ﻿using AlSuitBuilder.Server.Data;
+using AlSuitBuilder.Server.Persistence;
 using AlSuitBuilder.Shared.Messages.Server;
 using System;
 using System.Collections.Generic;
@@ -120,19 +121,43 @@ namespace AlSuitBuilder.Server.Actions
                         }
                         else
                         {
-
                             success = true;
                             responseMessage = $"Starting Build [{_suitName}] Will attempt processing {workItems.Count} items.";
 
+                            var buildId = Guid.NewGuid().ToString();
 
                             Program.BuildInfo = new BuildInfo()
                             {
+                                BuildId = buildId,
                                 InitiatedId = _clientId,
                                 DropCharacter = clientInfo.CharacterName,
                                 StartTime = DateTime.Now,
                                 Name = _suitName,
                                 WorkItems = workItems
                             };
+
+                            // Initialize persistence for this build
+                            if (Program.PersistenceManager != null)
+                            {
+                                try
+                                {
+                                    var persistentState = BuildPersistenceManager.FromBuildInfo(Program.BuildInfo, filename);
+                                    Program.PersistenceManager.SaveActiveState(persistentState);
+                                    Program.PersistenceManager.StartBuildLog(buildId);
+                                    Program.PersistenceManager.LogEvent(new BuildEventLog
+                                    {
+                                        Timestamp = DateTime.Now,
+                                        EventType = BuildEventType.BuildStarted,
+                                        Message = $"Build started: {_suitName} with {workItems.Count} items",
+                                        CharacterName = clientInfo.CharacterName
+                                    });
+                                }
+                                catch (Exception ex)
+                                {
+                                    Utils.LogException(ex);
+                                    // Don't fail the build if persistence fails
+                                }
+                            }
                         }
 
                     }

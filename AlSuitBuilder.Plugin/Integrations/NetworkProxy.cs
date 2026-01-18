@@ -38,6 +38,10 @@ namespace AlSuitBuilder.Plugin.Integrations
                 IntegratedClient.AddMessageHandler<GiveItemMessage>(GiveItemMessageHandler);
                 IntegratedClient.AddMessageHandler<InitiateBuildResponseMessage>(InitiateBuildResponseMessageHandler);
                 IntegratedClient.AddMessageHandler<SwitchCharacterMessage>(SwitchCharacterMessageHandler);
+                IntegratedClient.AddMessageHandler<ResumeBuildResponseMessage>(ResumeBuildResponseMessageHandler);
+                IntegratedClient.AddMessageHandler<BuildStatusResponseMessage>(BuildStatusResponseMessageHandler);
+                IntegratedClient.AddMessageHandler<BuildHistoryResponseMessage>(BuildHistoryResponseMessageHandler);
+                IntegratedClient.AddMessageHandler<AbandonBuildResponseMessage>(AbandonBuildResponseMessageHandler);
 
                 _started = true;
             }
@@ -58,6 +62,59 @@ namespace AlSuitBuilder.Plugin.Integrations
         private void InitiateBuildResponseMessageHandler(MessageHeader header, InitiateBuildResponseMessage message)
         {
             Utils.WriteToChat($"Response: Accepted = {message.Accepted}, Message = {message.Message}");
+        }
+
+        private void ResumeBuildResponseMessageHandler(MessageHeader header, ResumeBuildResponseMessage message)
+        {
+            if (message.CanResume)
+            {
+                Utils.WriteToChat($"[Resume] {message.Message}");
+                Utils.WriteToChat($"[Resume] Remaining: {message.RemainingItems}/{message.TotalItems} items");
+            }
+            else
+            {
+                Utils.WriteToChat($"[Resume] Failed: {message.Message}");
+            }
+        }
+
+        private void BuildStatusResponseMessageHandler(MessageHeader header, BuildStatusResponseMessage message)
+        {
+            Utils.WriteToChat($"[Status] {message.Message}");
+            if (message.HasActiveBuild)
+            {
+                Utils.WriteToChat($"[Status] Progress: {message.CompletedItems}/{message.TotalItems} ({message.ProgressPercentage:F1}%)");
+                Utils.WriteToChat($"[Status] Elapsed: {message.ElapsedTime:hh\\:mm\\:ss}");
+            }
+        }
+
+        private void BuildHistoryResponseMessageHandler(MessageHeader header, BuildHistoryResponseMessage message)
+        {
+            if (message.Entries == null || message.Entries.Count == 0)
+            {
+                Utils.WriteToChat("[History] No build history available.");
+                return;
+            }
+
+            Utils.WriteToChat($"[History] Recent builds ({message.Entries.Count}):");
+            foreach (var entry in message.Entries)
+            {
+                var duration = entry.EndTime.HasValue
+                    ? (entry.EndTime.Value - entry.StartTime).ToString(@"hh\:mm\:ss")
+                    : "N/A";
+                Utils.WriteToChat($"  - {entry.SuitName}: {entry.Status} ({entry.CompletedItems}/{entry.TotalItems}) [{duration}]");
+            }
+        }
+
+        private void AbandonBuildResponseMessageHandler(MessageHeader header, AbandonBuildResponseMessage message)
+        {
+            if (message.Success)
+            {
+                Utils.WriteToChat($"[Abandon] {message.Message}");
+            }
+            else
+            {
+                Utils.WriteToChat($"[Abandon] Failed: {message.Message}");
+            }
         }
 
         private void GiveItemMessageHandler(MessageHeader header, GiveItemMessage message)
@@ -91,6 +148,10 @@ namespace AlSuitBuilder.Plugin.Integrations
             IntegratedClient?.RemoveMessageHandler<GiveItemMessage>(GiveItemMessageHandler);
             IntegratedClient?.RemoveMessageHandler<InitiateBuildResponseMessage>(InitiateBuildResponseMessageHandler);
             IntegratedClient?.RemoveMessageHandler<SwitchCharacterMessage>(SwitchCharacterMessageHandler);
+            IntegratedClient?.RemoveMessageHandler<ResumeBuildResponseMessage>(ResumeBuildResponseMessageHandler);
+            IntegratedClient?.RemoveMessageHandler<BuildStatusResponseMessage>(BuildStatusResponseMessageHandler);
+            IntegratedClient?.RemoveMessageHandler<BuildHistoryResponseMessage>(BuildHistoryResponseMessageHandler);
+            IntegratedClient?.RemoveMessageHandler<AbandonBuildResponseMessage>(AbandonBuildResponseMessageHandler);
             IntegratedClient?.Dispose();
         }
 

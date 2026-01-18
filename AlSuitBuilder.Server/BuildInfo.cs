@@ -1,5 +1,6 @@
 ﻿using AlSuitBuilder.Server.Actions;
 using AlSuitBuilder.Server.Data;
+using AlSuitBuilder.Server.Persistence;
 using AlSuitBuilder.Shared;
 using AlSuitBuilder.Shared.Messages.Client;
 using AlSuitBuilder.Shared.Messages.Server;
@@ -12,6 +13,10 @@ namespace AlSuitBuilder.Server
 {
     internal class BuildInfo
     {
+        /// <summary>
+        /// Unique identifier for this build instance.
+        /// </summary>
+        public string BuildId { get; set; }
 
         // name aka filename
         public string Name { get; set; }
@@ -40,7 +45,54 @@ namespace AlSuitBuilder.Server
             if (WorkItems.Count == 0)
             {
                 Console.WriteLine("Build complete");
-                Program.SendMessageToClient(InitiatedId, new InitiateBuildResponseMessage() { Accepted= true, Message = "Build completed" });
+
+                // Finalize persistence
+                if (Program.PersistenceManager != null)
+                {
+                    try
+                    {
+                        var state = Program.PersistenceManager.LoadActiveState();
+                        if (state != null)
+                        {
+                            // Log completion
+                            Program.PersistenceManager.LogEvent(new BuildEventLog
+                            {
+                                Timestamp = DateTime.Now,
+                                EventType = BuildEventType.BuildCompleted,
+                                Message = "Build completed successfully"
+                            });
+
+                            // Add history entry
+                            var completedCount = state.WorkItems.Count(w => w.Status == WorkItemStatus.Completed);
+                            var failedCount = state.WorkItems.Count(w => w.Status == WorkItemStatus.Failed);
+
+                            var historyEntry = new BuildHistoryEntry
+                            {
+                                BuildId = state.BuildId,
+                                SuitName = state.Name,
+                                DropCharacter = state.DropCharacter,
+                                StartTime = state.StartTime,
+                                EndTime = DateTime.Now,
+                                FinalStatus = BuildStatus.Completed,
+                                TotalItems = state.TotalItemCount,
+                                CompletedItems = completedCount,
+                                FailedItems = failedCount,
+                                WasResumed = state.Status == BuildStatus.Resuming,
+                                LogFilePath = Program.PersistenceManager.GetCurrentLogPath()
+                            };
+
+                            Program.PersistenceManager.AddHistoryEntry(historyEntry);
+                            Program.PersistenceManager.ClearActiveState();
+                            Program.PersistenceManager.CloseCurrentLog();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Utils.LogException(ex);
+                    }
+                }
+
+                Program.SendMessageToClient(InitiatedId, new InitiateBuildResponseMessage() { Accepted = true, Message = "Build completed" });
                 Program.BuildInfo = null;
                 return;
             }
