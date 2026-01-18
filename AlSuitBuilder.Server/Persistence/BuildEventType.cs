@@ -14,6 +14,8 @@ namespace AlSuitBuilder.Server.Persistence
         WorkItemCompleted,
         WorkItemFailed,
         WorkItemRetry,
+        WorkItemSkippedOnDropoff,
+        DuplicateItemDetected,
         ClientConnected,
         ClientDisconnected,
         CharacterSwitch,

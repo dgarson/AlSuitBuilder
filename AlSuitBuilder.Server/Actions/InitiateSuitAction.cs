@@ -87,10 +87,25 @@ namespace AlSuitBuilder.Server.Actions
                         responseMessage = "Suit file was found but no valid items were found. Please make sure the format is correct";
                     }
                     else
-                    {                       
+                    {
                         foreach (var workItem in workItems)
                         {
                             Utils.WriteWorkItemToLog($"Parsed successfully from suit", workItem, true);
+                        }
+
+                        // Detect duplicate items in the parsed list
+                        var duplicates = DetectDuplicates(workItems);
+                        var duplicateCount = duplicates.Count;
+
+                        if (duplicates.Any())
+                        {
+                            Console.WriteLine($"[DUPLICATES] Detected {duplicateCount} duplicate item(s) in suit file:");
+                            foreach (var dup in duplicates)
+                            {
+                                Utils.WriteWorkItemToLog($"DUPLICATE DETECTED - removing duplicate entry", dup, true);
+                                Console.WriteLine($"  - {dup.ItemName} on {dup.Character} (Material: {dup.MaterialId}, Set: {dup.SetId})");
+                                workItems.Remove(dup);
+                            }
                         }
 
                         var characters = new List<string>();
@@ -105,11 +120,18 @@ namespace AlSuitBuilder.Server.Actions
                             characters.AddRange(client.OtherCharacters);
                         }
 
-                        var itemsOnBuilderChar = workItems.Select(o => o.Character == clientInfo.CharacterName ? o : null).Where(o => o != null);
-                        if (itemsOnBuilderChar.Count() > 0)
+                        // Track items already on dropoff character for user feedback
+                        var itemsOnDropoffChar = workItems.Where(o => o.Character == clientInfo.CharacterName).ToList();
+                        var dropoffSkippedCount = itemsOnDropoffChar.Count;
+
+                        if (dropoffSkippedCount > 0)
                         {
-                            foreach (var itemOnChar in itemsOnBuilderChar)
-                                Utils.WriteWorkItemToLog($"Excluding due to being on current character ({clientInfo.CharacterName})", itemOnChar, true);
+                            Console.WriteLine($"[DROPOFF] {dropoffSkippedCount} item(s) already on dropoff character '{clientInfo.CharacterName}':");
+                            foreach (var itemOnChar in itemsOnDropoffChar)
+                            {
+                                Utils.WriteWorkItemToLog($"SKIPPED - Item already on dropoff character ({clientInfo.CharacterName})", itemOnChar, true);
+                                Console.WriteLine($"  - {itemOnChar.ItemName} (Material: {itemOnChar.MaterialId}, Set: {itemOnChar.SetId})");
+                            }
                         }
 
                         workItems.RemoveAll(o => o.Character == clientInfo.CharacterName);
@@ -122,7 +144,19 @@ namespace AlSuitBuilder.Server.Actions
                         else
                         {
                             success = true;
-                            responseMessage = $"Starting Build [{_suitName}] Will attempt processing {workItems.Count} items.";
+
+                            // Build detailed response message with progress info
+                            var totalParsed = workItems.Count + dropoffSkippedCount + duplicateCount;
+                            var msgParts = new List<string>();
+                            msgParts.Add($"Starting Build [{_suitName}]");
+                            msgParts.Add($"Processing {workItems.Count} item(s)");
+
+                            if (dropoffSkippedCount > 0)
+                                msgParts.Add($"{dropoffSkippedCount} already on dropoff char");
+                            if (duplicateCount > 0)
+                                msgParts.Add($"{duplicateCount} duplicate(s) removed");
+
+                            responseMessage = string.Join(" | ", msgParts);
 
                             var buildId = Guid.NewGuid().ToString();
 
@@ -151,6 +185,34 @@ namespace AlSuitBuilder.Server.Actions
                                         Message = $"Build started: {_suitName} with {workItems.Count} items",
                                         CharacterName = clientInfo.CharacterName
                                     });
+
+                                    // Log duplicate items that were removed
+                                    foreach (var dup in duplicates)
+                                    {
+                                        Program.PersistenceManager.LogEvent(new BuildEventLog
+                                        {
+                                            Timestamp = DateTime.Now,
+                                            EventType = BuildEventType.DuplicateItemDetected,
+                                            Message = $"Duplicate item removed: {dup.ItemName}",
+                                            WorkItemId = dup.Id,
+                                            CharacterName = dup.Character,
+                                            Details = $"Material: {dup.MaterialId}, Set: {dup.SetId}"
+                                        });
+                                    }
+
+                                    // Log items skipped because they're on the dropoff character
+                                    foreach (var skipped in itemsOnDropoffChar)
+                                    {
+                                        Program.PersistenceManager.LogEvent(new BuildEventLog
+                                        {
+                                            Timestamp = DateTime.Now,
+                                            EventType = BuildEventType.WorkItemSkippedOnDropoff,
+                                            Message = $"Item skipped (already on dropoff char): {skipped.ItemName}",
+                                            WorkItemId = skipped.Id,
+                                            CharacterName = clientInfo.CharacterName,
+                                            Details = $"Material: {skipped.MaterialId}, Set: {skipped.SetId}"
+                                        });
+                                    }
                                 }
                                 catch (Exception ex)
                                 {
@@ -170,6 +232,37 @@ namespace AlSuitBuilder.Server.Actions
                 Message = responseMessage
             });
 
+        }
+
+        /// <summary>
+        /// Detects duplicate work items in the list. Two items are considered duplicates if they have
+        /// the same character, item name, material ID, set ID, and requirements (spells).
+        /// Returns the duplicate entries (keeping the first occurrence of each unique item).
+        /// </summary>
+        private List<WorkItem> DetectDuplicates(List<WorkItem> workItems)
+        {
+            var duplicates = new List<WorkItem>();
+            var seen = new HashSet<string>();
+
+            foreach (var item in workItems)
+            {
+                // Create a unique key based on the item's identifying properties
+                var requirementsKey = item.Requirements != null
+                    ? string.Join(",", item.Requirements.OrderBy(r => r))
+                    : "";
+                var key = $"{item.Character}|{item.ItemName}|{item.MaterialId}|{item.SetId}|{requirementsKey}";
+
+                if (seen.Contains(key))
+                {
+                    duplicates.Add(item);
+                }
+                else
+                {
+                    seen.Add(key);
+                }
+            }
+
+            return duplicates;
         }
     }
 }
